@@ -12,7 +12,7 @@ pub struct YahooClient {
 }
 
 impl YahooClient {
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut headers = header::HeaderMap::new();
         headers.insert(
             header::USER_AGENT,
@@ -40,7 +40,7 @@ impl YahooClient {
         Ok(Self { client, crumb })
     }
 
-    pub async fn fetch_screener(&self, scr_id: &str, count: usize) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub async fn fetch_screener(&self, scr_id: &str, count: usize) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?scrIds={}&count={}&crumb={}",
             scr_id, count, self.crumb
@@ -63,7 +63,7 @@ impl YahooClient {
         Ok(symbols)
     }
 
-    pub async fn fetch_layer1_fundamentals(&self, symbol: &str) -> Result<Option<FundamentalsRecord>, Box<dyn std::error::Error>> {
+    pub async fn fetch_layer1_fundamentals(&self, symbol: &str) -> Result<Option<FundamentalsRecord>, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=defaultKeyStatistics,financialData&crumb={}",
             symbol, self.crumb
@@ -94,7 +94,7 @@ impl YahooClient {
         Ok(None)
     }
 
-    pub async fn fetch_layer2_earnings(&self, symbol: &str) -> Result<Vec<EarningsRecord>, Box<dyn std::error::Error>> {
+    pub async fn fetch_layer2_earnings(&self, symbol: &str) -> Result<Vec<EarningsRecord>, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=earningsHistory&crumb={}",
             symbol, self.crumb
@@ -134,7 +134,7 @@ impl YahooClient {
         &self,
         symbol: &str,
         contract_limit: usize,
-    ) -> Result<(f64, Vec<OptionGreekSnapshot>), Box<dyn std::error::Error>> {
+    ) -> Result<(f64, Vec<OptionGreekSnapshot>), Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://query1.finance.yahoo.com/v7/finance/options/{}?crumb={}",
             symbol, self.crumb

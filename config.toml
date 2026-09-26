@@ -1,0 +1,93 @@
+# ==============================================================================
+# WEEKDAY JOBS (Monday to Friday) - Staggered 1 hour apart, 2x per day
+# ==============================================================================
+
+[[jobs]]
+name = "S&P 500 Tech - Weekday"
+cron = "0 0 8,16 * * MON-FRI *"
+mode = "--sp500"
+
+[[jobs]]
+name = "Top Gainers - Weekday"
+cron = "0 0 9,17 * * MON-FRI *"
+mode = "--gainers"
+
+[[jobs]]
+name = "Top Losers - Weekday"
+cron = "0 0 10,18 * * MON-FRI *"
+mode = "--losers"
+
+[[jobs]]
+name = "Most Active - Weekday"
+cron = "0 0 11,19 * * MON-FRI *"
+mode = "--active"
+
+[[jobs]]
+name = "Most Volatile - Weekday"
+cron = "0 0 12,20 * * MON-FRI *"
+mode = "--volatile"
+
+[[jobs]]
+name = "Unusual Volume - Weekday"
+cron = "0 0 13,21 * * MON-FRI *"
+mode = "--unusual-volume"
+
+[[jobs]]
+name = "New 52-Week Highs - Weekday"
+cron = "0 0 14,22 * * MON-FRI *"
+mode = "--highs"
+
+[[jobs]]
+name = "Earnings Today - Weekday"
+cron = "0 0 15,23 * * MON-FRI *"
+mode = "--earnings"
+
+# ==============================================================================
+# WEEKEND JOBS (Saturday & Sunday) - Staggered 1 hour apart, 1x per day
+# ==============================================================================
+
+[[jobs]]
+name = "S&P 500 Tech - Weekend"
+cron = "0 0 10 * * SAT,SUN *"
+mode = "--sp500"
+
+[[jobs]]
+name = "Top Gainers - Weekend"
+cron = "0 0 11 * * SAT,SUN *"
+mode = "--gainers"
+
+[[jobs]]
+name = "Top Losers - Weekend"
+cron = "0 0 12 * * SAT,SUN *"
+mode = "--losers"
+
+[[jobs]]
+name = "Most Active - Weekend"
+cron = "0 0 13 * * SAT,SUN *"
+mode = "--active"
+
+[[jobs]]
+name = "Most Volatile - Weekend"
+cron = "0 0 14 * * SAT,SUN *"
+mode = "--volatile"
+
+[[jobs]]
+name = "Unusual Volume - Weekend"
+cron = "0 0 15 * * SAT,SUN *"
+mode = "--unusual-volume"
+
+[[jobs]]
+name = "New 52-Week Highs - Weekend"
+cron = "0 0 16 * * SAT,SUN *"
+mode = "--highs"
+
+[[jobs]]
+name = "Earnings Today - Weekend"
+cron = "0 0 17 * * SAT,SUN *"
+mode = "--earnings"
+
+
+[[jobs]]
+name = "Test Job - Fast Execution"
+cron = "1/10 * * * * * *" # Runs every 10 seconds
+mode = "--sp500"

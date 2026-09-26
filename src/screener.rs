@@ -1,5 +1,7 @@
 use crate::yahoo::YahooClient;
+use std::fs;
 
+#[derive(Clone, Debug)]
 pub enum ScreenerMode {
     Sp500Tech,
     TopGainers,
@@ -18,15 +20,13 @@ impl Screener {
     pub async fn resolve_tickers(
         client: &YahooClient,
         mode: ScreenerMode,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         match mode {
             ScreenerMode::Sp500Tech => {
-                println!("Loading predefined S&P 500 Tech Watchlist...");
-                Ok(vec![
-                    "AAPL".to_string(), "MSFT".to_string(), "NVDA".to_string(), "GOOGL".to_string(),
-                    "AMZN".to_string(), "META".to_string(), "AVGO".to_string(), "AMD".to_string(),
-                    "TSLA".to_string(), "INTC".to_string(), "CRM".to_string(), "ORCL".to_string(),
-                ])
+                println!("Loading predefined S&P 500 Tech json file");
+                let content = fs::read_to_string("sp500_tech.json")?;
+                let tickers: Vec<String> = serde_json::from_str(&content)?;
+                Ok(tickers)
             }
             ScreenerMode::TopGainers => {
                 println!("Querying Yahoo Screener for Top Gainers...");

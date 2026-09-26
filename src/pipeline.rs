@@ -6,7 +6,7 @@ pub async fn run_etl_for_ticker(
     db_pool: &PgPool,
     yahoo_client: &YahooClient,
     symbol: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("--------------------------------------------------");
     println!("Starting ETL Pipeline for: {}", symbol);
 

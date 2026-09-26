@@ -12,5 +12,8 @@ serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 
+config = "0.14"
+tokio-cron-scheduler = "0.10"
+
 # The Black-Scholes Math Engine for local Greek calculations
 blackscholes = "0.24"
