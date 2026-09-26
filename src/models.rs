@@ -1,6 +1,27 @@
-#![allow(dead_code)] // Silences warnings for unused API fields
+#![allow(dead_code)]
 
 use serde::Deserialize;
+
+// --- Yahoo Screener API Models ---
+#[derive(Deserialize, Debug)]
+pub struct YahooScreenerResponse {
+    pub finance: ScreenerFinance,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ScreenerFinance {
+    pub result: Vec<ScreenerResult>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ScreenerResult {
+    pub quotes: Vec<ScreenerQuote>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ScreenerQuote {
+    pub symbol: String,
+}
 
 // --- Yahoo Summary API Models ---
 #[derive(Deserialize, Debug)]
@@ -52,10 +73,9 @@ pub struct EarningsHistoryItem {
     pub eps_actual: Option<F64Value>,
     pub eps_estimate: Option<F64Value>,
     pub eps_surprise_percent: Option<F64Value>,
-    pub quarter: Option<QuarterValue>, // FIX: Changed from Option<String>
+    pub quarter: Option<QuarterValue>,
 }
 
-// FIX: Added struct to handle Yahoo's nested quarter object
 #[derive(Deserialize, Debug)]
 pub struct QuarterValue {
     pub fmt: Option<String>,
@@ -102,16 +122,16 @@ pub struct OptionData {
 pub struct Contract {
     pub contract_symbol: String,
     pub strike: f64,
-    pub last_price: f64,
-    pub bid: f64,
-    pub ask: f64,
+    pub last_price: Option<f64>,
+    pub bid: Option<f64>,
+    pub ask: Option<f64>,
     pub volume: Option<i32>,
     pub open_interest: Option<i32>,
-    pub implied_volatility: f64,
+    pub implied_volatility: Option<f64>,
     pub expiration: i64,
 }
 
-// --- Internal Domain Data Containers ---
+// --- Internal Domain Containers ---
 pub struct FundamentalsRecord {
     pub symbol: String,
     pub revenue_growth: Option<f64>,

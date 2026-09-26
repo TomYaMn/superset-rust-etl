@@ -75,3 +75,15 @@ CREATE TABLE l4_volatility_reality_check (
 );
 SELECT create_hypertable('l4_volatility_reality_check', 'earnings_date');
 CREATE INDEX idx_l4_symbol_date ON l4_volatility_reality_check (symbol, earnings_date DESC);
+
+
+
+-- docker exec -it superset-rust-stack-timescaledb-1 psql -U market -d stock_data -c "
+-- SELECT 'l1_fundamentals_quarterly' AS table_name, COUNT(*) FROM l1_fundamentals_quarterly
+-- UNION ALL
+-- SELECT 'l2_earnings_context', COUNT(*) FROM l2_earnings_context
+-- UNION ALL
+-- SELECT 'l3_l5_options_greeks_snapshots', COUNT(*) FROM l3_l5_options_greeks_snapshots
+-- UNION ALL
+-- SELECT 'l4_volatility_reality_check', COUNT(*) FROM l4_volatility_reality_check;
+-- "

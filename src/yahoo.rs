@@ -1,6 +1,6 @@
 use crate::models::{
     EarningsRecord, FundamentalsRecord, OptionGreekSnapshot, YahooOptionsResponse,
-    YahooQuoteSummaryResponse,
+    YahooQuoteSummaryResponse, YahooScreenerResponse,
 };
 use blackscholes::{Greeks, Inputs, OptionType};
 use chrono::{DateTime, Utc};
@@ -26,7 +26,6 @@ impl YahooClient {
             .default_headers(headers)
             .build()?;
 
-        // Authenticate session and get crumb token
         let _ = client.get("https://fc.yahoo.com").send().await?;
         let crumb_res = client
             .get("https://query1.finance.yahoo.com/v1/test/getcrumb")
@@ -39,6 +38,29 @@ impl YahooClient {
         }
 
         Ok(Self { client, crumb })
+    }
+
+    pub async fn fetch_screener(&self, scr_id: &str, count: usize) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let url = format!(
+            "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?scrIds={}&count={}&crumb={}",
+            scr_id, count, self.crumb
+        );
+
+        let res = self.client.get(&url).send().await?;
+        if !res.status().is_success() {
+            return Ok(vec![]);
+        }
+
+        let data: YahooScreenerResponse = res.json().await?;
+        let mut symbols = Vec::new();
+
+        if let Some(first_res) = data.finance.result.first() {
+            for quote in &first_res.quotes {
+                symbols.push(quote.symbol.clone());
+            }
+        }
+
+        Ok(symbols)
     }
 
     pub async fn fetch_layer1_fundamentals(&self, symbol: &str) -> Result<Option<FundamentalsRecord>, Box<dyn std::error::Error>> {
@@ -91,7 +113,6 @@ impl YahooClient {
                         for item in history_items {
                             records.push(EarningsRecord {
                                 symbol: symbol.to_string(),
-                                // FIX: Extract the string safely from the nested "fmt" field
                                 market_time: item
                                     .quarter
                                     .as_ref()
@@ -109,7 +130,6 @@ impl YahooClient {
         Ok(records)
     }
 
-    // Returns a tuple: (current_stock_price, vec_of_snapshots)
     pub async fn fetch_layer3_5_options_greeks(
         &self,
         symbol: &str,
@@ -127,25 +147,41 @@ impl YahooClient {
 
         let mut snapshots = Vec::new();
         let raw_data: YahooOptionsResponse = response.json().await?;
+        
+        if raw_data.option_chain.result.is_empty() {
+            return Ok((0.0, vec![]));
+        }
+
         let result_item = &raw_data.option_chain.result[0];
         let current_stock_price = result_item.quote.regular_market_price;
+        
+        if result_item.options.is_empty() {
+            return Ok((current_stock_price, vec![]));
+        }
+
         let options_data = &result_item.options[0];
         let snapshot_time = Utc::now();
 
         for contract in options_data.calls.iter().take(contract_limit) {
-            let expiration_date = DateTime::from_timestamp(contract.expiration, 0).unwrap_or_else(|| Utc::now());
+            let expiration_date = DateTime::from_timestamp(contract.expiration, 0).unwrap_or_else(Utc::now);
             let days_to_expiration = (expiration_date.date_naive() - snapshot_time.date_naive()).num_days() as i32;
             let t_years = (days_to_expiration as f32) / 365.25;
+
+            // Safely unwrap optional fields, defaulting to 0.0 if missing
+            let last_price = contract.last_price.unwrap_or(0.0);
+            let bid = contract.bid.unwrap_or(0.0);
+            let ask = contract.ask.unwrap_or(0.0);
+            let iv = contract.implied_volatility.unwrap_or(0.0);
 
             let bs_inputs = Inputs::new(
                 OptionType::Call,
                 current_stock_price as f32,
                 contract.strike as f32,
-                Some(contract.last_price as f32),
-                0.045, // 4.5% Risk-free rate
+                Some(last_price as f32),
+                0.045,
                 0.0,
                 t_years,
-                Some(contract.implied_volatility as f32),
+                Some(iv as f32),
             );
 
             let delta = bs_inputs.calc_delta().unwrap_or(0.0) as f64;
@@ -160,12 +196,12 @@ impl YahooClient {
                 days_to_expiration,
                 strike: contract.strike,
                 option_type: "CALL".to_string(),
-                bid: contract.bid,
-                ask: contract.ask,
-                last_price: contract.last_price,
+                bid,
+                ask,
+                last_price,
                 volume: contract.volume,
                 open_interest: contract.open_interest,
-                implied_volatility: contract.implied_volatility,
+                implied_volatility: iv,
                 delta,
                 gamma,
                 theta,
