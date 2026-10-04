@@ -12,6 +12,7 @@ pub enum ScreenerMode {
     New52WeekHigh,
     EarningsToday,
     Custom(Vec<String>),
+    CustomFile(String), // Add this new mode for custom JSON files
 }
 
 pub struct Screener;
@@ -26,6 +27,15 @@ impl Screener {
                 println!("Loading predefined S&P 500 Tech json file");
                 let content = fs::read_to_string("sp500_tech.json")?;
                 let tickers: Vec<String> = serde_json::from_str(&content)?;
+                Ok(tickers)
+            }
+            // NEW: Custom JSON File Reader with explicit error handling
+            ScreenerMode::CustomFile(filepath) => {
+                println!("Loading custom JSON file: {}", filepath);
+                let content = fs::read_to_string(&filepath)
+                    .map_err(|e| format!("CRITICAL ERROR: Failed to read JSON file '{}' - {}", filepath, e))?;
+                let tickers: Vec<String> = serde_json::from_str(&content)
+                    .map_err(|e| format!("CRITICAL ERROR: Failed to parse JSON in '{}' - {}", filepath, e))?;
                 Ok(tickers)
             }
             ScreenerMode::TopGainers => {

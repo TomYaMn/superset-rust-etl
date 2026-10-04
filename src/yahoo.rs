@@ -78,15 +78,24 @@ impl YahooClient {
                     let stats = modules.default_key_statistics.as_ref();
                     let fin = modules.financial_data.as_ref();
 
-
-                    let free_cash_flow = fin.and_then(|f| f.free_cashflow.as_ref()).and_then(|f| f.raw);
-                    let total_revenue = fin.and_then(|f| f.total_revenue.as_ref()).and_then(|r| r.raw);
+                let free_cash_flow = fin.and_then(|f| f.free_cashflow.as_ref()).and_then(|f| f.raw);
+                let mut total_revenue = fin.and_then(|f| f.total_revenue.as_ref()).and_then(|r| r.raw);
+                
+                // FALLBACK: If Yahoo omits totalRevenue, calculate it dynamically
+                if total_revenue.is_none() {
+                    let rev_per_share = fin.and_then(|f| f.revenue_per_share.as_ref()).and_then(|r| r.raw);
+                    let shares = stats.and_then(|s| s.shares_outstanding.as_ref()).and_then(|s| s.raw);
                     
-                    // Calculate FCF Margin: (Free Cash Flow / Total Revenue)
-                    let fcf_margin = match (free_cash_flow, total_revenue) {
-                        (Some(fcf), Some(rev)) if rev > 0.0 => Some(fcf / rev),
-                        _ => None,
-                    };
+                    if let (Some(rps), Some(shrs)) = (rev_per_share, shares) {
+                        total_revenue = Some(rps * shrs);
+                    }
+                }
+                
+                // Calculate FCF Margin: (Free Cash Flow / Total Revenue)
+                let fcf_margin = match (free_cash_flow, total_revenue) {
+                    (Some(fcf), Some(rev)) if rev > 0.0 => Some(fcf / rev),
+                    _ => None,
+                };
 
                     return Ok(Some(FundamentalsRecord {
                     symbol: symbol.to_string(),

@@ -59,7 +59,8 @@ pub struct FinancialData {
     pub free_cashflow: Option<F64Value>,
     pub debt_to_equity: Option<F64Value>,
     pub revenue_growth: Option<F64Value>,
-    pub total_revenue: Option<F64Value>, // Add this field
+    pub total_revenue: Option<F64Value>,
+    pub revenue_per_share: Option<F64Value>,
 }
 
 #[derive(Deserialize, Debug)]
