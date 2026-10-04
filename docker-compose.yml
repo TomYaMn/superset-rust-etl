@@ -29,14 +29,14 @@ services:
       timeout: 5s
       retries: 5
   rust_etl:
-    image: superset-rust-stack-etl:lastest  # <--- Change to your uploaded image tag
+    image: superset-rust-stack-etl:latest  # <--- Change to your uploaded image tag
     pull_policy: never
     container_name: rust_etl_job
     restart: unless-stopped
     env_file:
       - .env                                         # <--- Loads DATABASE_URL and other secrets dynamically
     environment:
-      - TZ=Asia/Kuala_Lumpur
+      - TZ=America/New_York
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config.toml:/app/config.toml

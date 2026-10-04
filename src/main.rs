@@ -119,14 +119,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let yahoo_client = Arc::clone(&yahoo_client);
             let job_name = job_cfg.name.clone();
             let mode_str = job_cfg.mode.clone();
-            let mode = parse_mode(&job_cfg.mode);
             
             let job = Job::new_async(job_cfg.cron.as_str(), move |_uuid, mut _l| {
                 let db_pool = Arc::clone(&db_pool);
                 let yahoo_client = Arc::clone(&yahoo_client);
                 let job_name = job_name.clone();
                 let mode_str = mode_str.clone();
-                let mode = mode.clone();
 
                 Box::pin(async move {
                     println!("Starting Scheduled Job: {}", job_name);

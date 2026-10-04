@@ -1,47 +1,83 @@
 # ==============================================================================
-# 1. HEAVY FUNDAMENTALS SWEEP (Runs ONCE daily at 13:00 UTC / 9:00 PM MYT)
-# Fetches all L1, L2, L3, L4, L5 data before the US market opens.
-# ==============================================================================
-
-[[jobs]]
-name = "Daily Full Sweep - S&P 500"
-cron = "0 0 13 * * MON-FRI *"
-mode = "--sp500"
-
-[[jobs]]
-name = "Daily Full Sweep - Earnings Today"
-cron = "0 15 13 * * MON-FRI *"
-mode = "--earnings"
-
-# ==============================================================================
-# 2. LIGHTWEIGHT INTRADAY OPTIONS SWEEP (Hourly during US Market Hours)
+# 1. LIGHTWEIGHT INTRADAY OPTIONS SWEEP (Hourly during US Market Hours)
 # Fetches ONLY L3, L4, L5 (Options and Pricing). Skips L1/L2.
-# Runs hourly from 14:00 UTC to 21:00 UTC (10:00 PM to 5:00 AM MYT).
+# Runs hourly from 10:00 AM to 4:00 PM (America/New_York time), Monday-Friday.
 # ==============================================================================
 
 [[jobs]]
 name = "Hourly Options - Earnings Today"
-cron = "0 0 14-21 * * MON-FRI *"
+cron = "0 0 10-16 * * MON-FRI *"
 mode = "--earnings --options-only"
 
 [[jobs]]
 name = "Hourly Options - Most Volatile"
-cron = "0 5 14-21 * * MON-FRI *" 
+cron = "0 5 10-16 * * MON-FRI *" 
 mode = "--volatile --options-only"
 
 [[jobs]]
 name = "Hourly Options - Unusual Volume"
-cron = "0 10 14-21 * * MON-FRI *" 
+cron = "0 10 10-16 * * MON-FRI *" 
 mode = "--unusual-volume --options-only"
 
 [[jobs]]
 name = "Hourly Options - Top Gainers"
-cron = "0 15 14-21 * * MON-FRI *" 
+cron = "0 15 10-16 * * MON-FRI *" 
 mode = "--gainers --options-only"
+
+[[jobs]]
+name = "Hourly Options - Top Losers"
+cron = "0 20 10-16 * * MON-FRI *" 
+mode = "--losers --options-only"
+
+# ==============================================================================
+# 2. HEAVY END-OF-DAY SWEEP (Runs ONCE daily after market close)
+# Fetches all L1, L2, L3, L4, L5 data.
+# Staggered from 4:30 PM to 5:45 PM (America/New_York time), Monday-Friday.
+# ==============================================================================
+
+[[jobs]]
+name = "Daily Full Sweep - S&P 500"
+cron = "0 30 16 * * MON-FRI *"
+mode = "--sp500"
+
+[[jobs]]
+name = "Daily Full Sweep - Earnings Today"
+cron = "0 45 16 * * MON-FRI *"
+mode = "--earnings"
+
+[[jobs]]
+name = "Daily Full Sweep - New 52-Week Highs"
+cron = "0 55 16 * * MON-FRI *"
+mode = "--highs"
+
+[[jobs]]
+name = "Daily Full Sweep - Top Gainers"
+cron = "0 05 17 * * MON-FRI *"
+mode = "--gainers"
+
+[[jobs]]
+name = "Daily Full Sweep - Top Losers"
+cron = "0 15 17 * * MON-FRI *"
+mode = "--losers"
+
+[[jobs]]
+name = "Daily Full Sweep - Most Active"
+cron = "0 25 17 * * MON-FRI *"
+mode = "--active"
+
+[[jobs]]
+name = "Daily Full Sweep - Most Volatile"
+cron = "0 35 17 * * MON-FRI *"
+mode = "--volatile"
+
+[[jobs]]
+name = "Daily Full Sweep - Unusual Volume"
+cron = "0 45 17 * * MON-FRI *"
+mode = "--unusual-volume"
 
 # ==============================================================================
 # 3. NIGHTLY ACTUALS RECONCILIATION
-# Runs once a day at 02:00 UTC (10:00 AM MYT) to lock in reported earnings.
+# Runs once a day at 02:00 AM (America/New_York time) to lock in reported earnings.
 # ==============================================================================
 
 [[jobs]]
