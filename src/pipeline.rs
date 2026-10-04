@@ -36,13 +36,17 @@ pub async fn run_etl_for_ticker(
     println!("  [L3/L5] Saved {} Option Greek snapshots.", greeks_snapshots.len());
 
     // 4. Layer 4 Execution (Volatility Reality Check)
+// 4. Layer 4 Execution (Volatility Reality Check)
     if let Some(first_contract) = greeks_snapshots.first() {
         let straddle_price = first_contract.last_price * 2.0;
+        let iv_rank = Some(first_contract.implied_volatility);
+
         db::calculate_and_insert_layer4(
             db_pool,
             symbol,
             current_stock_price,
             straddle_price,
+            iv_rank,
         )
         .await?;
         println!("  [L4] Volatility check calculated.");

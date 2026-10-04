@@ -97,13 +97,18 @@ impl YahooClient {
                     _ => None,
                 };
 
-                    return Ok(Some(FundamentalsRecord {
+                let eps_growth = fin.and_then(|f| f.earnings_growth.as_ref()).and_then(|g| g.raw);
+                let roic = fin.and_then(|f| f.return_on_assets.as_ref()).and_then(|r| r.raw);
+
+                return Ok(Some(FundamentalsRecord {
                     symbol: symbol.to_string(),
                     revenue_growth: fin.and_then(|f| f.revenue_growth.as_ref()).and_then(|r| r.raw),
+                    eps_growth,
                     gross_margin: fin.and_then(|f| f.gross_margins.as_ref()).and_then(|m| m.raw),
                     operating_margin: fin.and_then(|f| f.operating_margins.as_ref()).and_then(|m| m.raw),
+                    roic,
                     free_cash_flow,
-                    fcf_margin, // <--- MAKE SURE THIS LINE IS HERE
+                    fcf_margin,
                     debt_to_equity: fin.and_then(|f| f.debt_to_equity.as_ref()).and_then(|d| d.raw),
                     pe_ratio: stats.and_then(|s| s.forward_p_e.as_ref()).and_then(|p| p.raw),
                     ev_to_ebitda: stats.and_then(|s| s.enterprise_to_ebitda.as_ref()).and_then(|e| e.raw),
@@ -115,8 +120,9 @@ impl YahooClient {
         }
 
     pub async fn fetch_layer2_earnings(&self, symbol: &str) -> Result<Vec<EarningsRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        // Request BOTH earningsHistory and earningsTrend
         let url = format!(
-            "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=earningsHistory&crumb={}",
+            "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=earningsHistory,earningsTrend&crumb={}",
             symbol, self.crumb
         );
 
@@ -126,21 +132,58 @@ impl YahooClient {
         let mut records = Vec::new();
         let data: YahooQuoteSummaryResponse = response.json().await?;
 
-        if let Some(results) = data.quote_summary.result {
+        let mut fwd_revenue_guidance = None;
+        let mut estimated_revenue = None;
+        let mut sentiment = None;
+
+        if let Some(results) = data.quote_summary.result.as_ref() {
             if let Some(modules) = results.first() {
+                
+                // 1. Extract Revenue and Sentiment from earningsTrend
+                if let Some(trend_wrapper) = &modules.earnings_trend {
+                    if let Some(trends) = &trend_wrapper.trend {
+                        for t in trends {
+                            let period = t.period.as_deref().unwrap_or("");
+                            
+                            if period == "+1q" {
+                                fwd_revenue_guidance = t.revenue_estimate.as_ref()
+                                    .and_then(|e| e.avg.as_ref())
+                                    .and_then(|a| a.raw);
+                                
+                                let up = t.eps_revisions.as_ref().and_then(|r| r.up_last_30_days.as_ref()).and_then(|v| v.raw).unwrap_or(0.0);
+                                let down = t.eps_revisions.as_ref().and_then(|r| r.down_last_30_days.as_ref()).and_then(|v| v.raw).unwrap_or(0.0);
+                                sentiment = Some(up - down);
+                            }
+                            
+                            if period == "0q" {
+                                estimated_revenue = t.revenue_estimate.as_ref()
+                                    .and_then(|e| e.avg.as_ref())
+                                    .and_then(|a| a.raw);
+                            }
+                        }
+                    }
+                }
+
+                // 2. Build the records from earningsHistory
                 if let Some(history_wrapper) = &modules.earnings_history {
                     if let Some(history_items) = &history_wrapper.history {
-                        for item in history_items {
+                        let total_items = history_items.len();
+                        
+                        for (i, item) in history_items.iter().enumerate() {
+                            // Only attach the forward guidance to the most recent historical quarter
+                            let is_latest = i == total_items - 1;
+
                             records.push(EarningsRecord {
                                 symbol: symbol.to_string(),
-                                market_time: item
-                                    .quarter
-                                    .as_ref()
-                                    .and_then(|q| q.fmt.clone())
-                                    .unwrap_or_else(|| "NQ".to_string()),
+                                market_time: item.quarter.as_ref().and_then(|q| q.fmt.clone()).unwrap_or_else(|| "NQ".to_string()),
                                 estimated_eps: item.eps_estimate.as_ref().and_then(|v| v.raw),
                                 actual_eps: item.eps_actual.as_ref().and_then(|v| v.raw),
                                 eps_surprise_pct: item.eps_surprise_percent.as_ref().and_then(|v| v.raw),
+                                estimated_revenue: if is_latest { estimated_revenue } else { None },
+                                actual_revenue: None, 
+                                revenue_surprise_pct: None,
+                                forward_revenue_guidance: if is_latest { fwd_revenue_guidance } else { None },
+                                guidance_revision_sentiment: if is_latest { sentiment } else { None },
                             });
                         }
                     }

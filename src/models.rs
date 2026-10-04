@@ -41,6 +41,7 @@ pub struct SummaryModules {
     pub default_key_statistics: Option<DefaultKeyStatistics>,
     pub financial_data: Option<FinancialData>,
     pub earnings_history: Option<EarningsHistoryWrapper>,
+    pub earnings_trend: Option<EarningsTrendWrapper>, // <--- NEW
 }
 
 #[derive(Deserialize, Debug)]
@@ -59,6 +60,8 @@ pub struct FinancialData {
     pub free_cashflow: Option<F64Value>,
     pub debt_to_equity: Option<F64Value>,
     pub revenue_growth: Option<F64Value>,
+    pub earnings_growth: Option<F64Value>,     // <--- ADD THIS (eps_growth_yoy)
+    pub return_on_assets: Option<F64Value>,    // <--- ADD THIS (used for roic estimate)
     pub total_revenue: Option<F64Value>,
     pub revenue_per_share: Option<F64Value>,
 }
@@ -88,6 +91,35 @@ pub struct F64Value {
     pub raw: Option<f64>,
     pub fmt: Option<String>,
 }
+
+
+#[derive(Deserialize, Debug)]
+pub struct EarningsTrendWrapper {
+    pub trend: Option<Vec<EarningsTrendItem>>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EarningsTrendItem {
+    pub period: Option<String>,
+    pub revenue_estimate: Option<EstimateData>,
+    pub eps_revisions: Option<EpsRevisions>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct EstimateData {
+    pub avg: Option<F64Value>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EpsRevisions {
+    #[serde(rename = "upLast30days")]
+    pub up_last_30_days: Option<F64Value>,
+    #[serde(rename = "downLast30days")]
+    pub down_last_30_days: Option<F64Value>,
+}
+
 
 // --- Yahoo Options API Models ---
 #[derive(Deserialize, Debug)]
@@ -137,8 +169,10 @@ pub struct Contract {
 pub struct FundamentalsRecord {
     pub symbol: String,
     pub revenue_growth: Option<f64>,
+    pub eps_growth: Option<f64>,               // <--- ADD THIS
     pub gross_margin: Option<f64>,
     pub operating_margin: Option<f64>,
+    pub roic: Option<f64>,                     // <--- ADD THIS
     pub free_cash_flow: Option<f64>,
     pub fcf_margin: Option<f64>,
     pub debt_to_equity: Option<f64>,
@@ -153,6 +187,11 @@ pub struct EarningsRecord {
     pub estimated_eps: Option<f64>,
     pub actual_eps: Option<f64>,
     pub eps_surprise_pct: Option<f64>,
+    pub estimated_revenue: Option<f64>,
+    pub actual_revenue: Option<f64>, // Requires deep income statement parsing (stays None for now)
+    pub revenue_surprise_pct: Option<f64>, 
+    pub forward_revenue_guidance: Option<f64>,
+    pub guidance_revision_sentiment: Option<f64>,
 }
 
 pub struct OptionGreekSnapshot {
