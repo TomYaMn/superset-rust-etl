@@ -71,6 +71,7 @@ async fn execute_job(
     mode: ScreenerMode,
     db_pool: Arc<PgPool>,
     yahoo_client: Arc<YahooClient>,
+    options_only: bool, // <--- ADD THIS
 ) {
     println!("Starting Job: {}", job_name);
     
@@ -83,7 +84,8 @@ async fn execute_job(
     };
 
     for symbol in tickers {
-        if let Err(e) = pipeline::run_etl_for_ticker(&db_pool, &yahoo_client, &symbol).await {
+        // Pass the flag down to the pipeline
+        if let Err(e) = pipeline::run_etl_for_ticker(&db_pool, &yahoo_client, &symbol, options_only).await {
             eprintln!("  ❌ ETL failed for {}: {}", symbol, e);
         }
         sleep(Duration::from_millis(1500)).await;
@@ -129,6 +131,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 Box::pin(async move {
                     println!("Starting Scheduled Job: {}", job_name);
                     
+                    // Inside the scheduled job closure:
+                    let is_options_only = mode_str.contains("--options-only");
+                    let clean_mode_str = mode_str.replace("--options-only", "").trim().to_string();
+                    let mode = parse_mode(&clean_mode_str);
+
                     // Route the job based on the mode string
                     if mode_str == "--reconcile-all" {
                         let _ = pipeline::reconcile_all_unreconciled(&db_pool, &yahoo_client).await;
@@ -136,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         let symbol = mode_str.trim_start_matches("--reconcile").trim();
                         let _ = pipeline::reconcile_l2_earnings(&db_pool, &yahoo_client, symbol).await;
                     } else {
-                        execute_job(&job_name, mode, db_pool, yahoo_client).await;
+                        execute_job(&job_name, mode, db_pool, yahoo_client, is_options_only).await;                    
                     }
                 })
             })?;
@@ -172,10 +179,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 eprintln!("Reconciliation failed: {}", e);
             }
         } else {
+            // FIXED MANUAL RUN MODE
             println!("ENABLE_SCHEDULER=false. Running in manual CLI mode...");
-            let mode = parse_mode(&target_mode);
+            
+            // Extract the flag for manual runs
+            let is_options_only = target_mode.contains("--options-only");
+            let clean_mode_str = target_mode.replace("--options-only", "").trim().to_string();
+            
+            let mode = parse_mode(&clean_mode_str);
             let job_name = format!("Manual Run ({})", target_mode);
-            execute_job(&job_name, mode, db_pool, yahoo_client).await;
+            
+            // Pass the flag here
+            execute_job(&job_name, mode, db_pool, yahoo_client, is_options_only).await;
         }
     }
 

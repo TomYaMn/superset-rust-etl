@@ -1,98 +1,50 @@
 # ==============================================================================
-# WEEKDAY JOBS (Monday to Friday) - Staggered 1 hour apart, 2x per day
+# 1. HEAVY FUNDAMENTALS SWEEP (Runs ONCE daily at 13:00 UTC / 9:00 PM MYT)
+# Fetches all L1, L2, L3, L4, L5 data before the US market opens.
 # ==============================================================================
 
 [[jobs]]
-name = "S&P 500 Tech - Weekday"
-cron = "0 0 8,16 * * MON-FRI *"
+name = "Daily Full Sweep - S&P 500"
+cron = "0 0 13 * * MON-FRI *"
 mode = "--sp500"
 
 [[jobs]]
-name = "Top Gainers - Weekday"
-cron = "0 0 9,17 * * MON-FRI *"
-mode = "--gainers"
-
-[[jobs]]
-name = "Top Losers - Weekday"
-cron = "0 0 10,18 * * MON-FRI *"
-mode = "--losers"
-
-[[jobs]]
-name = "Most Active - Weekday"
-cron = "0 0 11,19 * * MON-FRI *"
-mode = "--active"
-
-[[jobs]]
-name = "Most Volatile - Weekday"
-cron = "0 0 12,20 * * MON-FRI *"
-mode = "--volatile"
-
-[[jobs]]
-name = "Unusual Volume - Weekday"
-cron = "0 0 13,21 * * MON-FRI *"
-mode = "--unusual-volume"
-
-[[jobs]]
-name = "New 52-Week Highs - Weekday"
-cron = "0 0 14,22 * * MON-FRI *"
-mode = "--highs"
-
-[[jobs]]
-name = "Earnings Today - Weekday"
-cron = "0 0 15,23 * * MON-FRI *"
+name = "Daily Full Sweep - Earnings Today"
+cron = "0 15 13 * * MON-FRI *"
 mode = "--earnings"
 
 # ==============================================================================
-# WEEKEND JOBS (Saturday & Sunday) - Staggered 1 hour apart, 1x per day
+# 2. LIGHTWEIGHT INTRADAY OPTIONS SWEEP (Hourly during US Market Hours)
+# Fetches ONLY L3, L4, L5 (Options and Pricing). Skips L1/L2.
+# Runs hourly from 14:00 UTC to 21:00 UTC (10:00 PM to 5:00 AM MYT).
 # ==============================================================================
 
 [[jobs]]
-name = "S&P 500 Tech - Weekend"
-cron = "0 0 10 * * SAT,SUN *"
-mode = "--sp500"
+name = "Hourly Options - Earnings Today"
+cron = "0 0 14-21 * * MON-FRI *"
+mode = "--earnings --options-only"
 
 [[jobs]]
-name = "Top Gainers - Weekend"
-cron = "0 0 11 * * SAT,SUN *"
-mode = "--gainers"
+name = "Hourly Options - Most Volatile"
+cron = "0 5 14-21 * * MON-FRI *" 
+mode = "--volatile --options-only"
 
 [[jobs]]
-name = "Top Losers - Weekend"
-cron = "0 0 12 * * SAT,SUN *"
-mode = "--losers"
+name = "Hourly Options - Unusual Volume"
+cron = "0 10 14-21 * * MON-FRI *" 
+mode = "--unusual-volume --options-only"
 
 [[jobs]]
-name = "Most Active - Weekend"
-cron = "0 0 13 * * SAT,SUN *"
-mode = "--active"
+name = "Hourly Options - Top Gainers"
+cron = "0 15 14-21 * * MON-FRI *" 
+mode = "--gainers --options-only"
 
-[[jobs]]
-name = "Most Volatile - Weekend"
-cron = "0 0 14 * * SAT,SUN *"
-mode = "--volatile"
-
-[[jobs]]
-name = "Unusual Volume - Weekend"
-cron = "0 0 15 * * SAT,SUN *"
-mode = "--unusual-volume"
-
-[[jobs]]
-name = "New 52-Week Highs - Weekend"
-cron = "0 0 16 * * SAT,SUN *"
-mode = "--highs"
-
-[[jobs]]
-name = "Earnings Today - Weekend"
-cron = "0 0 17 * * SAT,SUN *"
-mode = "--earnings"
+# ==============================================================================
+# 3. NIGHTLY ACTUALS RECONCILIATION
+# Runs once a day at 02:00 UTC (10:00 AM MYT) to lock in reported earnings.
+# ==============================================================================
 
 [[jobs]]
 name = "Nightly Earnings Reconciliation"
-cron = "0 0 2 * * * *"   # Runs every night at 2:00 AM
+cron = "0 0 2 * * * *"
 mode = "--reconcile-all"
-
-
-[[jobs]]
-name = "Test Job - Fast Execution"
-cron = "1/10 * * * * * *" # Runs every 10 seconds
-mode = "--sp500"
