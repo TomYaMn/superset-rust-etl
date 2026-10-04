@@ -3,6 +3,22 @@ use chrono::Utc;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
+pub struct UnreconciledL2Record {
+    pub symbol: String,
+    pub market_time: String,
+    pub estimated_eps: Option<f64>,
+    pub actual_eps: Option<f64>,
+    pub estimated_revenue: Option<f64>,
+}
+
+pub struct UnreconciledL4Record {
+    pub symbol: String,
+    pub earnings_date: chrono::DateTime<chrono::Utc>,
+    pub pre_er_stock_price: f64,
+    pub implied_move_pct: f64,
+}
+
+
 pub async fn init_db_pool(db_url: &str) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
         .max_connections(5)
@@ -136,4 +152,145 @@ pub async fn calculate_and_insert_layer4(
         .await?;
 
     Ok(())
+}
+
+// Fetch rows with missing actual_revenue or missing surprise percentages
+pub async fn get_unreconciled_l2_records(
+    pool: &PgPool,
+    symbol: &str,
+) -> Result<Vec<UnreconciledL2Record>, sqlx::Error> {
+    
+    // Notice the ::FLOAT8 casts added to the 3 numeric columns
+    let query = r#"
+        SELECT 
+            symbol, 
+            market_time, 
+            estimated_eps::FLOAT8, 
+            actual_eps::FLOAT8, 
+            estimated_revenue::FLOAT8
+        FROM l2_earnings_context
+        WHERE symbol = $1 AND (actual_revenue IS NULL OR eps_surprise_pct IS NULL)
+    "#;
+
+    let rows = sqlx::query_as::<_, (String, String, Option<f64>, Option<f64>, Option<f64>)>(query)
+        .bind(symbol)
+        .fetch_all(pool)
+        .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| UnreconciledL2Record {
+            symbol: r.0,
+            market_time: r.1,
+            estimated_eps: r.2,
+            actual_eps: r.3,
+            estimated_revenue: r.4,
+        })
+        .collect())
+}
+
+// Update the l2 record with actuals and calculated surprise %
+pub async fn update_layer2_actuals(
+    pool: &PgPool,
+    symbol: &str,
+    market_time: &str,
+    actual_revenue: Option<f64>,
+    revenue_surprise_pct: Option<f64>,
+    eps_surprise_pct: Option<f64>,
+) -> Result<(), sqlx::Error> {
+    let query = r#"
+        UPDATE l2_earnings_context
+        SET 
+            actual_revenue = COALESCE($1, actual_revenue),
+            revenue_surprise_pct = COALESCE($2, revenue_surprise_pct),
+            eps_surprise_pct = COALESCE($3, eps_surprise_pct)
+        WHERE symbol = $4 AND market_time = $5
+    "#;
+
+    sqlx::query(query)
+        .bind(actual_revenue)
+        .bind(revenue_surprise_pct)
+        .bind(eps_surprise_pct)
+        .bind(symbol)
+        .bind(market_time)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+
+// Fetch L4 records where post_er_stock_price is still NULL
+pub async fn get_unreconciled_l4_records(
+    pool: &PgPool,
+    symbol: &str,
+) -> Result<Vec<UnreconciledL4Record>, sqlx::Error> {
+    let query = r#"
+        SELECT 
+            symbol, 
+            earnings_date, 
+            pre_er_stock_price::FLOAT8, 
+            implied_move_pct::FLOAT8
+        FROM l4_volatility_reality_check
+        WHERE symbol = $1 AND post_er_stock_price IS NULL
+    "#;
+
+    let rows = sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>, f64, f64)>(query)
+        .bind(symbol)
+        .fetch_all(pool)
+        .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| UnreconciledL4Record {
+            symbol: r.0,
+            earnings_date: r.1,
+            pre_er_stock_price: r.2,
+            implied_move_pct: r.3,
+        })
+        .collect())
+}
+
+// Update L4 record with post-earnings price and calculated move metrics
+pub async fn update_layer4_post_earnings(
+    pool: &PgPool,
+    symbol: &str,
+    earnings_date: chrono::DateTime<chrono::Utc>,
+    post_er_price: f64,
+    actual_move_pct: f64,
+    volatility_ratio: f64,
+) -> Result<(), sqlx::Error> {
+    let query = r#"
+        UPDATE l4_volatility_reality_check
+        SET 
+            post_er_stock_price = $1,
+            actual_move_pct = $2,
+            volatility_ratio = $3
+        WHERE symbol = $4 AND earnings_date = $5
+    "#;
+
+    sqlx::query(query)
+        .bind(post_er_price)
+        .bind(actual_move_pct)
+        .bind(volatility_ratio)
+        .bind(symbol)
+        .bind(earnings_date)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+
+// Fetch all unique symbols that have unreconciled records
+pub async fn get_unreconciled_symbols(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
+    let query = r#"
+        SELECT DISTINCT symbol
+        FROM l2_earnings_context
+        WHERE actual_revenue IS NULL OR eps_surprise_pct IS NULL
+    "#;
+
+    sqlx::query_scalar::<_, String>(query)
+        .fetch_all(pool)
+        .await
 }

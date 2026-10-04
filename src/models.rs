@@ -41,7 +41,8 @@ pub struct SummaryModules {
     pub default_key_statistics: Option<DefaultKeyStatistics>,
     pub financial_data: Option<FinancialData>,
     pub earnings_history: Option<EarningsHistoryWrapper>,
-    pub earnings_trend: Option<EarningsTrendWrapper>, // <--- NEW
+    pub earnings_trend: Option<EarningsTrendWrapper>,
+    pub earnings: Option<YahooEarningsModule>, // <--- ADD THIS
 }
 
 #[derive(Deserialize, Debug)]
@@ -86,12 +87,6 @@ pub struct QuarterValue {
     pub fmt: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct F64Value {
-    pub raw: Option<f64>,
-    pub fmt: Option<String>,
-}
-
 
 #[derive(Deserialize, Debug)]
 pub struct EarningsTrendWrapper {
@@ -118,6 +113,37 @@ pub struct EpsRevisions {
     pub up_last_30_days: Option<F64Value>,
     #[serde(rename = "downLast30days")]
     pub down_last_30_days: Option<F64Value>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct YahooEarningsModule {
+    pub financials_chart: Option<FinancialsChart>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FinancialsChart {
+    pub quarterly: Option<Vec<QuarterlyFinancialItem>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct QuarterlyFinancialItem {
+    pub date: Option<String>,      // e.g., "2Q2026" or "2026-07-31"
+    pub revenue: Option<F64Value>, // Actual quarterly revenue
+    pub earnings: Option<F64Value>,// Actual quarterly net income
+}
+
+// Data container for actual revenue lookup
+pub struct ActualRevenueItem {
+    pub date_str: String,
+    pub actual_revenue: f64,
+}
+
+
+#[derive(Deserialize, Debug)]
+pub struct F64Value {
+    pub raw: Option<f64>,
+    pub fmt: Option<String>,
 }
 
 

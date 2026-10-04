@@ -86,6 +86,11 @@ name = "Earnings Today - Weekend"
 cron = "0 0 17 * * SAT,SUN *"
 mode = "--earnings"
 
+[[jobs]]
+name = "Nightly Earnings Reconciliation"
+cron = "0 0 2 * * * *"   # Runs every night at 2:00 AM
+mode = "--reconcile-all"
+
 
 [[jobs]]
 name = "Test Job - Fast Execution"

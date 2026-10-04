@@ -47,6 +47,11 @@ fn parse_mode(mode_str: &str) -> ScreenerMode {
         return ScreenerMode::Custom(tickers);
     }
 
+    if mode_str.starts_with("--reconcile") {
+        let ticker = mode_str.trim_start_matches("--reconcile").trim().to_uppercase();
+        return ScreenerMode::Custom(vec![ticker]);
+    }
+
     match mode_str {
         "--gainers" => ScreenerMode::TopGainers,
         "--losers" => ScreenerMode::TopLosers,
@@ -91,12 +96,10 @@ async fn execute_job(
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenv::from_filename(".env.dev").ok();
     
-    // Initialize Shared Resources
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let db_pool = Arc::new(db::init_db_pool(&db_url).await?);
     let yahoo_client = Arc::new(YahooClient::new().await?);
 
-    // Check if we should run the scheduler or run in manual CLI mode
     let enable_scheduler = env::var("ENABLE_SCHEDULER").unwrap_or_else(|_| "false".to_string()) == "true";
 
     if enable_scheduler {
@@ -112,17 +115,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for job_cfg in app_config.jobs {
             let db_pool = Arc::clone(&db_pool);
             let yahoo_client = Arc::clone(&yahoo_client);
-            let mode = parse_mode(&job_cfg.mode);
             let job_name = job_cfg.name.clone();
+            let mode_str = job_cfg.mode.clone();
+            let mode = parse_mode(&job_cfg.mode);
             
             let job = Job::new_async(job_cfg.cron.as_str(), move |_uuid, mut _l| {
                 let db_pool = Arc::clone(&db_pool);
                 let yahoo_client = Arc::clone(&yahoo_client);
-                let mode = mode.clone(); 
                 let job_name = job_name.clone();
+                let mode_str = mode_str.clone();
+                let mode = mode.clone();
 
                 Box::pin(async move {
-                    execute_job(&job_name, mode, db_pool, yahoo_client).await;
+                    println!("Starting Scheduled Job: {}", job_name);
+                    
+                    // Route the job based on the mode string
+                    if mode_str == "--reconcile-all" {
+                        let _ = pipeline::reconcile_all_unreconciled(&db_pool, &yahoo_client).await;
+                    } else if mode_str.starts_with("--reconcile") {
+                        let symbol = mode_str.trim_start_matches("--reconcile").trim();
+                        let _ = pipeline::reconcile_l2_earnings(&db_pool, &yahoo_client, symbol).await;
+                    } else {
+                        execute_job(&job_name, mode, db_pool, yahoo_client).await;
+                    }
                 })
             })?;
 
@@ -133,25 +148,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         sched.start().await?;
         println!("Scheduler started. Application is running in daemon mode.");
         
-        // Listen for termination signals (Ctrl+C / Docker Stop) to shutdown cleanly
         tokio::signal::ctrl_c().await?;
         println!("Shutdown signal received. Exiting daemon...");
+
     } else {
         // MANUAL RUN MODE via CLI args
-        println!("ENABLE_SCHEDULER=false. Running in manual CLI mode...");
-        
-        // Skip executable name and join ALL arguments with spaces
         let args: Vec<String> = env::args().skip(1).collect();
         let target_mode = if args.is_empty() {
             "--sp500".to_string()
         } else {
-            args.join(" ") // Joins ["--custom", "NVDA"] into "--custom NVDA"
+            args.join(" ")
         };
 
-        let mode = parse_mode(&target_mode);
-        let job_name = format!("Manual Run ({})", target_mode);
-
-        execute_job(&job_name, mode, db_pool, yahoo_client).await;
+        if target_mode == "--reconcile-all" {
+            println!("ENABLE_SCHEDULER=false. Running global reconciliation...");
+            if let Err(e) = pipeline::reconcile_all_unreconciled(&db_pool, &yahoo_client).await {
+                eprintln!("Global reconciliation failed: {}", e);
+            }
+        } else if target_mode.starts_with("--reconcile") {
+            let symbol = target_mode.trim_start_matches("--reconcile").trim();
+            println!("ENABLE_SCHEDULER=false. Running single reconciliation for {}...", symbol);
+            if let Err(e) = pipeline::reconcile_l2_earnings(&db_pool, &yahoo_client, symbol).await {
+                eprintln!("Reconciliation failed: {}", e);
+            }
+        } else {
+            println!("ENABLE_SCHEDULER=false. Running in manual CLI mode...");
+            let mode = parse_mode(&target_mode);
+            let job_name = format!("Manual Run ({})", target_mode);
+            execute_job(&job_name, mode, db_pool, yahoo_client).await;
+        }
     }
 
     Ok(())

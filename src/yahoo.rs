@@ -1,6 +1,6 @@
 use crate::models::{
     EarningsRecord, FundamentalsRecord, OptionGreekSnapshot, YahooOptionsResponse,
-    YahooQuoteSummaryResponse, YahooScreenerResponse,
+    YahooQuoteSummaryResponse, YahooScreenerResponse, ActualRevenueItem, 
 };
 use blackscholes::{Greeks, Inputs, OptionType};
 use chrono::{DateTime, Utc};
@@ -285,5 +285,44 @@ impl YahooClient {
         }
 
         Ok((current_stock_price, snapshots))
+    }
+
+
+pub async fn fetch_quarterly_actual_revenues(
+        &self,
+        symbol: &str,
+    ) -> Result<Vec<ActualRevenueItem>, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!(
+            "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=earnings&crumb={}",
+            symbol, self.crumb
+        );
+
+        let response = self.client.get(&url).send().await?;
+        if !response.status().is_success() { return Ok(vec![]); }
+
+        let mut actuals = Vec::new();
+        let data: YahooQuoteSummaryResponse = response.json().await?;
+
+        if let Some(results) = data.quote_summary.result {
+            if let Some(modules) = results.first() {
+                if let Some(earnings_mod) = &modules.earnings {
+                    if let Some(chart) = &earnings_mod.financials_chart {
+                        if let Some(quarters) = &chart.quarterly {
+                            for q in quarters {
+                                if let (Some(d), Some(rev)) = (&q.date, &q.revenue) {
+                                    if let Some(raw_rev) = rev.raw {
+                                        actuals.push(ActualRevenueItem {
+                                            date_str: d.clone(),
+                                            actual_revenue: raw_rev,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(actuals)
     }
 }

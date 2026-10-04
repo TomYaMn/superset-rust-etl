@@ -1,6 +1,8 @@
 use crate::db;
 use crate::yahoo::YahooClient;
 use sqlx::PgPool;
+use std::time::Duration;
+use tokio::time::sleep;
 
 pub async fn run_etl_for_ticker(
     db_pool: &PgPool,
@@ -53,5 +55,135 @@ pub async fn run_etl_for_ticker(
     }
 
     println!("Completed ETL for {}", symbol);
+    Ok(())
+}
+
+pub async fn reconcile_all_unreconciled(
+    db_pool: &PgPool,
+    yahoo_client: &YahooClient,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("--------------------------------------------------");
+    println!("Starting Global L2 & L4 Reconciliation");
+
+    let l2_symbols = db::get_unreconciled_symbols(db_pool).await?;
+    println!("  [Reconcile] Found {} symbols pending L2/L4 reconciliation.", l2_symbols.len());
+
+    for symbol in l2_symbols {
+        if let Err(e) = reconcile_l2_earnings(db_pool, yahoo_client, &symbol).await {
+            eprintln!("  ❌ L2 Reconciliation failed for {}: {}", symbol, e);
+        }
+        
+        if let Err(e) = reconcile_l4_volatility(db_pool, yahoo_client, &symbol).await {
+            eprintln!("  ❌ L4 Reconciliation failed for {}: {}", symbol, e);
+        }
+        
+        sleep(Duration::from_millis(1500)).await;
+    }
+
+    println!("Global Reconciliation Complete.");
+    Ok(())
+}
+
+pub async fn reconcile_l2_earnings(
+    db_pool: &PgPool,
+    yahoo_client: &YahooClient,
+    symbol: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Running L2 Earnings Reconciliation for: {}", symbol);
+
+    let records = db::get_unreconciled_l2_records(db_pool, symbol).await?;
+    if records.is_empty() {
+        println!("  [L2 Reconcile] All records up to date.");
+        return Ok(());
+    }
+
+    let actual_revenues = yahoo_client.fetch_quarterly_actual_revenues(symbol).await?;
+
+    for rec in records {
+        // Calculate EPS Surprise % if missing: (actual - est) / |est|
+        let calculated_eps_surprise = match (rec.actual_eps, rec.estimated_eps) {
+            (Some(act), Some(est)) if est != 0.0 => Some((act - est) / est.abs()),
+            _ => None,
+        };
+
+        // Match reported revenue from Yahoo
+        let matched_revenue = actual_revenues
+            .iter()
+            .find(|a| rec.market_time.contains(&a.date_str) || a.date_str.contains(&rec.market_time))
+            .map(|a| a.actual_revenue);
+
+        // Calculate Revenue Surprise %: (actual - est) / est
+        let calculated_rev_surprise = match (matched_revenue, rec.estimated_revenue) {
+            (Some(act), Some(est)) if est > 0.0 => Some((act - est) / est),
+            _ => None,
+        };
+
+        db::update_layer2_actuals(
+            db_pool,
+            &rec.symbol,
+            &rec.market_time,
+            matched_revenue,
+            calculated_rev_surprise,
+            calculated_eps_surprise,
+        )
+        .await?;
+
+        println!(
+            "  [L2 Reconcile] Updated {} ({}): Actual Rev = {:?}, Rev Surprise = {:?}, EPS Surprise = {:?}",
+            rec.symbol, rec.market_time, matched_revenue, calculated_rev_surprise, calculated_eps_surprise
+        );
+    }
+
+    Ok(())
+}
+
+
+pub async fn reconcile_l4_volatility(
+    db_pool: &PgPool,
+    yahoo_client: &YahooClient,
+    symbol: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Running L4 Volatility Reconciliation for: {}", symbol);
+
+    let records = db::get_unreconciled_l4_records(db_pool, symbol).await?;
+    if records.is_empty() {
+        println!("  [L4 Reconcile] All records up to date.");
+        return Ok(());
+    }
+
+    // Fetch latest stock price from Yahoo
+    let (current_price, _) = yahoo_client.fetch_layer3_5_options_greeks(symbol, 1).await?;
+    if current_price <= 0.0 {
+        println!("  [L4 Reconcile] Skipped (Could not fetch current stock price).");
+        return Ok(());
+    }
+
+    for rec in records {
+        // Calculate Actual Move %: |Post_Price - Pre_Price| / Pre_Price
+        let actual_move_pct = (current_price - rec.pre_er_stock_price).abs() / rec.pre_er_stock_price;
+
+        // Calculate Volatility Ratio: Actual_Move % / Implied_Move %
+        let volatility_ratio = if rec.implied_move_pct > 0.0 {
+            actual_move_pct / rec.implied_move_pct
+        } else {
+            0.0
+        };
+
+        db::update_layer4_post_earnings(
+            db_pool,
+            &rec.symbol,
+            rec.earnings_date,
+            current_price,
+            actual_move_pct,
+            volatility_ratio,
+        )
+        .await?;
+
+        println!(
+            "  [L4 Reconcile] Updated {} (Pre: ${:.2} -> Post: ${:.2}): Actual Move = {:.2}%, Vol Ratio = {:.2}",
+            rec.symbol, rec.pre_er_stock_price, current_price, actual_move_pct * 100.0, volatility_ratio
+        );
+    }
+
     Ok(())
 }
