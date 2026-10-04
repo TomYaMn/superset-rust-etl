@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let yahoo_client = Arc::new(YahooClient::new().await?);
 
     // 3. Setup Scheduler
-    let mut sched = JobScheduler::new().await?;
+    let sched = JobScheduler::new().await?;
 
     for job_cfg in app_config.jobs {
         let db_pool = Arc::clone(&db_pool);

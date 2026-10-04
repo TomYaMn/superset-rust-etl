@@ -59,6 +59,7 @@ pub struct FinancialData {
     pub free_cashflow: Option<F64Value>,
     pub debt_to_equity: Option<F64Value>,
     pub revenue_growth: Option<F64Value>,
+    pub total_revenue: Option<F64Value>, // Add this field
 }
 
 #[derive(Deserialize, Debug)]
@@ -138,6 +139,7 @@ pub struct FundamentalsRecord {
     pub gross_margin: Option<f64>,
     pub operating_margin: Option<f64>,
     pub free_cash_flow: Option<f64>,
+    pub fcf_margin: Option<f64>,
     pub debt_to_equity: Option<f64>,
     pub pe_ratio: Option<f64>,
     pub ev_to_ebitda: Option<f64>,

@@ -15,10 +15,10 @@ pub async fn insert_layer1_fundamentals(pool: &PgPool, record: &FundamentalsReco
     let query = r#"
         INSERT INTO l1_fundamentals_quarterly (
             report_date, symbol, fiscal_period, revenue_growth_yoy,
-            gross_margin, operating_margin, free_cash_flow,
+            gross_margin, operating_margin, free_cash_flow, fcf_margin,
             debt_to_equity, pe_ratio, ev_to_ebitda, shares_outstanding
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     "#;
 
     sqlx::query(query)
@@ -29,6 +29,7 @@ pub async fn insert_layer1_fundamentals(pool: &PgPool, record: &FundamentalsReco
         .bind(record.gross_margin)
         .bind(record.operating_margin)
         .bind(record.free_cash_flow)
+        .bind(record.fcf_margin)
         .bind(record.debt_to_equity)
         .bind(record.pe_ratio)
         .bind(record.ev_to_ebitda)
@@ -44,9 +45,10 @@ pub async fn insert_layer2_earnings(pool: &PgPool, record: &EarningsRecord) -> R
     let query = r#"
         INSERT INTO l2_earnings_context (
             earnings_date, symbol, market_time,
-            estimated_eps, actual_eps, eps_surprise_pct
+            estimated_eps, actual_eps, eps_surprise_pct,
+            estimated_revenue, actual_revenue, revenue_surprise_pct
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     "#;
 
     sqlx::query(query)
@@ -56,6 +58,9 @@ pub async fn insert_layer2_earnings(pool: &PgPool, record: &EarningsRecord) -> R
         .bind(record.estimated_eps)
         .bind(record.actual_eps)
         .bind(record.eps_surprise_pct)
+        .bind(Option::<f64>::None) // estimated_revenue
+        .bind(Option::<f64>::None) // actual_revenue
+        .bind(Option::<f64>::None) // revenue_surprise_pct
         .execute(pool)
         .await?;
 

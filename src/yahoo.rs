@@ -64,35 +64,46 @@ impl YahooClient {
     }
 
     pub async fn fetch_layer1_fundamentals(&self, symbol: &str) -> Result<Option<FundamentalsRecord>, Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!(
-            "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=defaultKeyStatistics,financialData&crumb={}",
-            symbol, self.crumb
-        );
+            let url = format!(
+                "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=defaultKeyStatistics,financialData&crumb={}",
+                symbol, self.crumb
+            );
 
-        let response = self.client.get(&url).send().await?;
-        if !response.status().is_success() { return Ok(None); }
+            let response = self.client.get(&url).send().await?;
+            if !response.status().is_success() { return Ok(None); }
 
-        let data: YahooQuoteSummaryResponse = response.json().await?;
-        if let Some(results) = data.quote_summary.result {
-            if let Some(modules) = results.first() {
-                let stats = modules.default_key_statistics.as_ref();
-                let fin = modules.financial_data.as_ref();
+            let data: YahooQuoteSummaryResponse = response.json().await?;
+            if let Some(results) = data.quote_summary.result {
+                if let Some(modules) = results.first() {
+                    let stats = modules.default_key_statistics.as_ref();
+                    let fin = modules.financial_data.as_ref();
 
-                return Ok(Some(FundamentalsRecord {
+
+                    let free_cash_flow = fin.and_then(|f| f.free_cashflow.as_ref()).and_then(|f| f.raw);
+                    let total_revenue = fin.and_then(|f| f.total_revenue.as_ref()).and_then(|r| r.raw);
+                    
+                    // Calculate FCF Margin: (Free Cash Flow / Total Revenue)
+                    let fcf_margin = match (free_cash_flow, total_revenue) {
+                        (Some(fcf), Some(rev)) if rev > 0.0 => Some(fcf / rev),
+                        _ => None,
+                    };
+
+                    return Ok(Some(FundamentalsRecord {
                     symbol: symbol.to_string(),
                     revenue_growth: fin.and_then(|f| f.revenue_growth.as_ref()).and_then(|r| r.raw),
                     gross_margin: fin.and_then(|f| f.gross_margins.as_ref()).and_then(|m| m.raw),
                     operating_margin: fin.and_then(|f| f.operating_margins.as_ref()).and_then(|m| m.raw),
-                    free_cash_flow: fin.and_then(|f| f.free_cashflow.as_ref()).and_then(|f| f.raw),
+                    free_cash_flow,
+                    fcf_margin, // <--- MAKE SURE THIS LINE IS HERE
                     debt_to_equity: fin.and_then(|f| f.debt_to_equity.as_ref()).and_then(|d| d.raw),
                     pe_ratio: stats.and_then(|s| s.forward_p_e.as_ref()).and_then(|p| p.raw),
                     ev_to_ebitda: stats.and_then(|s| s.enterprise_to_ebitda.as_ref()).and_then(|e| e.raw),
                     shares_outstanding: stats.and_then(|s| s.shares_outstanding.as_ref()).and_then(|s| s.raw),
                 }));
+                }
             }
+            Ok(None)
         }
-        Ok(None)
-    }
 
     pub async fn fetch_layer2_earnings(&self, symbol: &str) -> Result<Vec<EarningsRecord>, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
@@ -162,32 +173,44 @@ impl YahooClient {
         let options_data = &result_item.options[0];
         let snapshot_time = Utc::now();
 
+        // Inside fetch_layer3_5_options_greeks in src/yahoo.rs
+
         for contract in options_data.calls.iter().take(contract_limit) {
             let expiration_date = DateTime::from_timestamp(contract.expiration, 0).unwrap_or_else(Utc::now);
             let days_to_expiration = (expiration_date.date_naive() - snapshot_time.date_naive()).num_days() as i32;
-            let t_years = (days_to_expiration as f32) / 365.25;
 
-            // Safely unwrap optional fields, defaulting to 0.0 if missing
+            // Guard against expired or 0-DTE options causing NaN in Black-Scholes
+            if days_to_expiration <= 0 {
+                continue; // Skip expired options
+            }
+
+            let t_years = (days_to_expiration as f32) / 365.25;
             let last_price = contract.last_price.unwrap_or(0.0);
             let bid = contract.bid.unwrap_or(0.0);
             let ask = contract.ask.unwrap_or(0.0);
             let iv = contract.implied_volatility.unwrap_or(0.0);
 
-            let bs_inputs = Inputs::new(
-                OptionType::Call,
-                current_stock_price as f32,
-                contract.strike as f32,
-                Some(last_price as f32),
-                0.045,
-                0.0,
-                t_years,
-                Some(iv as f32),
-            );
+            let (delta, gamma, theta, vega) = if iv > 0.0 && t_years > 0.0 {
+                let bs_inputs = Inputs::new(
+                    OptionType::Call,
+                    current_stock_price as f32,
+                    contract.strike as f32,
+                    Some(last_price as f32),
+                    0.045,
+                    0.0,
+                    t_years,
+                    Some(iv as f32),
+                );
 
-            let delta = bs_inputs.calc_delta().unwrap_or(0.0) as f64;
-            let gamma = bs_inputs.calc_gamma().unwrap_or(0.0) as f64;
-            let theta = (bs_inputs.calc_theta().unwrap_or(0.0) / 365.25) as f64;
-            let vega = (bs_inputs.calc_vega().unwrap_or(0.0) / 100.0) as f64;
+                (
+                    bs_inputs.calc_delta().unwrap_or(0.0) as f64,
+                    bs_inputs.calc_gamma().unwrap_or(0.0) as f64,
+                    (bs_inputs.calc_theta().unwrap_or(0.0) / 365.25) as f64,
+                    (bs_inputs.calc_vega().unwrap_or(0.0) / 100.0) as f64,
+                )
+            } else {
+                (0.0, 0.0, 0.0, 0.0)
+            };
 
             snapshots.push(OptionGreekSnapshot {
                 symbol: symbol.to_string(),
