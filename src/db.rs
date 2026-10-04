@@ -34,26 +34,29 @@ pub async fn insert_layer1_fundamentals(pool: &PgPool, record: &FundamentalsReco
             gross_margin, operating_margin, roic, free_cash_flow, fcf_margin,
             debt_to_equity, pe_ratio, ev_to_ebitda, shares_outstanding
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES (DATE_TRUNC('day', $1::TIMESTAMPTZ), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ON CONFLICT (symbol, fiscal_period, report_date)
+        DO UPDATE SET 
+            revenue_growth_yoy = EXCLUDED.revenue_growth_yoy,
+            eps_growth_yoy = EXCLUDED.eps_growth_yoy,
+            gross_margin = EXCLUDED.gross_margin,
+            operating_margin = EXCLUDED.operating_margin,
+            roic = EXCLUDED.roic,
+            free_cash_flow = EXCLUDED.free_cash_flow,
+            fcf_margin = EXCLUDED.fcf_margin,
+            debt_to_equity = EXCLUDED.debt_to_equity,
+            pe_ratio = EXCLUDED.pe_ratio,
+            ev_to_ebitda = EXCLUDED.ev_to_ebitda,
+            shares_outstanding = EXCLUDED.shares_outstanding
     "#;
 
     sqlx::query(query)
-        .bind(now)
-        .bind(&record.symbol)
-        .bind("CURRENT")
-        .bind(record.revenue_growth)
-        .bind(record.eps_growth)            // $5
-        .bind(record.gross_margin)
-        .bind(record.operating_margin)
-        .bind(record.roic)                  // $8
-        .bind(record.free_cash_flow)
-        .bind(record.fcf_margin)
-        .bind(record.debt_to_equity)
-        .bind(record.pe_ratio)
-        .bind(record.ev_to_ebitda)
+        .bind(now).bind(&record.symbol).bind("CURRENT").bind(record.revenue_growth)
+        .bind(record.eps_growth).bind(record.gross_margin).bind(record.operating_margin)
+        .bind(record.roic).bind(record.free_cash_flow).bind(record.fcf_margin)
+        .bind(record.debt_to_equity).bind(record.pe_ratio).bind(record.ev_to_ebitda)
         .bind(record.shares_outstanding)
-        .execute(pool)
-        .await?;
+        .execute(pool).await?;
 
     Ok(())
 }
@@ -67,23 +70,24 @@ pub async fn insert_layer2_earnings(pool: &PgPool, record: &EarningsRecord) -> R
             estimated_revenue, actual_revenue, revenue_surprise_pct,
             forward_revenue_guidance, guidance_revision_sentiment
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES (DATE_TRUNC('day', $1::TIMESTAMPTZ), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ON CONFLICT (symbol, market_time, earnings_date) 
+        DO UPDATE SET 
+            estimated_eps = EXCLUDED.estimated_eps,
+            actual_eps = EXCLUDED.actual_eps,
+            eps_surprise_pct = COALESCE(EXCLUDED.eps_surprise_pct, l2_earnings_context.eps_surprise_pct),
+            estimated_revenue = EXCLUDED.estimated_revenue,
+            actual_revenue = COALESCE(EXCLUDED.actual_revenue, l2_earnings_context.actual_revenue),
+            forward_revenue_guidance = EXCLUDED.forward_revenue_guidance,
+            guidance_revision_sentiment = EXCLUDED.guidance_revision_sentiment
     "#;
 
     sqlx::query(query)
-        .bind(now)
-        .bind(&record.symbol)
-        .bind(&record.market_time)
-        .bind(record.estimated_eps)
-        .bind(record.actual_eps)
-        .bind(record.eps_surprise_pct)
-        .bind(record.estimated_revenue)
-        .bind(record.actual_revenue)
-        .bind(record.revenue_surprise_pct)
-        .bind(record.forward_revenue_guidance)
-        .bind(record.guidance_revision_sentiment)
-        .execute(pool)
-        .await?;
+        .bind(now).bind(&record.symbol).bind(&record.market_time).bind(record.estimated_eps)
+        .bind(record.actual_eps).bind(record.eps_surprise_pct).bind(record.estimated_revenue)
+        .bind(record.actual_revenue).bind(record.revenue_surprise_pct)
+        .bind(record.forward_revenue_guidance).bind(record.guidance_revision_sentiment)
+        .execute(pool).await?;
 
     Ok(())
 }
@@ -96,29 +100,28 @@ pub async fn insert_layer3_5_greeks(pool: &PgPool, snapshot: &OptionGreekSnapsho
             strike, option_type, bid_price, ask_price, last_price, volume, open_interest,
             implied_volatility, delta, gamma, theta, vega
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        VALUES (DATE_TRUNC('minute', $1::TIMESTAMPTZ), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        ON CONFLICT (symbol, contract_symbol, snapshot_time)
+        DO UPDATE SET
+            bid_price = EXCLUDED.bid_price,
+            ask_price = EXCLUDED.ask_price,
+            last_price = EXCLUDED.last_price,
+            volume = EXCLUDED.volume,
+            open_interest = EXCLUDED.open_interest,
+            implied_volatility = EXCLUDED.implied_volatility,
+            delta = EXCLUDED.delta,
+            gamma = EXCLUDED.gamma,
+            theta = EXCLUDED.theta,
+            vega = EXCLUDED.vega
     "#;
 
     sqlx::query(query)
-        .bind(now)
-        .bind(&snapshot.symbol)
-        .bind(&snapshot.contract_symbol)
-        .bind(snapshot.expiration_date)
-        .bind(snapshot.days_to_expiration)
-        .bind(snapshot.strike)
-        .bind(&snapshot.option_type)
-        .bind(snapshot.bid)
-        .bind(snapshot.ask)
-        .bind(snapshot.last_price)
-        .bind(snapshot.volume)
-        .bind(snapshot.open_interest)
-        .bind(snapshot.implied_volatility)
-        .bind(snapshot.delta)
-        .bind(snapshot.gamma)
-        .bind(snapshot.theta)
-        .bind(snapshot.vega)
-        .execute(pool)
-        .await?;
+        .bind(now).bind(&snapshot.symbol).bind(&snapshot.contract_symbol).bind(snapshot.expiration_date)
+        .bind(snapshot.days_to_expiration).bind(snapshot.strike).bind(&snapshot.option_type)
+        .bind(snapshot.bid).bind(snapshot.ask).bind(snapshot.last_price).bind(snapshot.volume)
+        .bind(snapshot.open_interest).bind(snapshot.implied_volatility).bind(snapshot.delta)
+        .bind(snapshot.gamma).bind(snapshot.theta).bind(snapshot.vega)
+        .execute(pool).await?;
 
     Ok(())
 }
@@ -138,18 +141,19 @@ pub async fn calculate_and_insert_layer4(
             earnings_date, symbol, pre_er_stock_price, pre_er_iv_rank,
             atm_straddle_price, implied_move_pct
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES (DATE_TRUNC('day', $1::TIMESTAMPTZ), $2, $3, $4, $5, $6)
+        ON CONFLICT (symbol, earnings_date)
+        DO UPDATE SET 
+            pre_er_stock_price = EXCLUDED.pre_er_stock_price,
+            pre_er_iv_rank = EXCLUDED.pre_er_iv_rank,
+            atm_straddle_price = EXCLUDED.atm_straddle_price,
+            implied_move_pct = EXCLUDED.implied_move_pct
     "#;
 
     sqlx::query(query)
-        .bind(now)
-        .bind(symbol)
-        .bind(stock_price)
-        .bind(iv_rank)
-        .bind(atm_straddle_price)
-        .bind(implied_move_pct)
-        .execute(pool)
-        .await?;
+        .bind(now).bind(symbol).bind(stock_price).bind(iv_rank)
+        .bind(atm_straddle_price).bind(implied_move_pct)
+        .execute(pool).await?;
 
     Ok(())
 }

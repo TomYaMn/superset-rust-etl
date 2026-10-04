@@ -77,13 +77,33 @@ SELECT create_hypertable('l4_volatility_reality_check', 'earnings_date');
 CREATE INDEX idx_l4_symbol_date ON l4_volatility_reality_check (symbol, earnings_date DESC);
 
 
+-- 4th Oct - remove duplicate entry when api called multiple time feature
 
--- docker exec -it superset-rust-stack-timescaledb-1 psql -U market -d stock_data -c "
--- SELECT 'l1_fundamentals_quarterly' AS table_name, COUNT(*) FROM l1_fundamentals_quarterly
--- UNION ALL
--- SELECT 'l2_earnings_context', COUNT(*) FROM l2_earnings_context
--- UNION ALL
--- SELECT 'l3_l5_options_greeks_snapshots', COUNT(*) FROM l3_l5_options_greeks_snapshots
--- UNION ALL
--- SELECT 'l4_volatility_reality_check', COUNT(*) FROM l4_volatility_reality_check;
--- "
+
+-- 1. LAYER 1: Fundamentals
+DELETE FROM l1_fundamentals_quarterly WHERE ctid IN (
+    SELECT ctid FROM (SELECT ctid, ROW_NUMBER() OVER(PARTITION BY symbol, fiscal_period ORDER BY report_date DESC) as rn FROM l1_fundamentals_quarterly) t WHERE t.rn > 1
+);
+UPDATE l1_fundamentals_quarterly SET report_date = DATE_TRUNC('day', report_date);
+ALTER TABLE l1_fundamentals_quarterly ADD CONSTRAINT uq_l1 UNIQUE (symbol, fiscal_period, report_date);
+
+-- 2. LAYER 2: Earnings Context
+DELETE FROM l2_earnings_context WHERE ctid IN (
+    SELECT ctid FROM (SELECT ctid, ROW_NUMBER() OVER(PARTITION BY symbol, market_time ORDER BY earnings_date DESC) as rn FROM l2_earnings_context) t WHERE t.rn > 1
+);
+UPDATE l2_earnings_context SET earnings_date = DATE_TRUNC('day', earnings_date);
+ALTER TABLE l2_earnings_context ADD CONSTRAINT uq_l2 UNIQUE (symbol, market_time, earnings_date);
+
+-- 3. LAYER 3 & 5: Options Greeks
+DELETE FROM l3_l5_options_greeks_snapshots WHERE ctid IN (
+    SELECT ctid FROM (SELECT ctid, ROW_NUMBER() OVER(PARTITION BY symbol, contract_symbol, DATE_TRUNC('minute', snapshot_time) ORDER BY snapshot_time DESC) as rn FROM l3_l5_options_greeks_snapshots) t WHERE t.rn > 1
+);
+UPDATE l3_l5_options_greeks_snapshots SET snapshot_time = DATE_TRUNC('minute', snapshot_time);
+ALTER TABLE l3_l5_options_greeks_snapshots ADD CONSTRAINT uq_l3_l5 UNIQUE (symbol, contract_symbol, snapshot_time);
+
+-- 4. LAYER 4: Volatility Check
+DELETE FROM l4_volatility_reality_check WHERE ctid IN (
+    SELECT ctid FROM (SELECT ctid, ROW_NUMBER() OVER(PARTITION BY symbol, DATE(earnings_date) ORDER BY earnings_date DESC) as rn FROM l4_volatility_reality_check) t WHERE t.rn > 1
+);
+UPDATE l4_volatility_reality_check SET earnings_date = DATE_TRUNC('day', earnings_date);
+ALTER TABLE l4_volatility_reality_check ADD CONSTRAINT uq_l4 UNIQUE (symbol, earnings_date);
